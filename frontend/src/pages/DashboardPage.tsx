@@ -32,6 +32,8 @@ import {
 import { getComparisonSettings } from '../services/settings';
 import { supabase } from '../services/supabase';
 import type { InputFile, MarsVersion, SimulationResult, ComparisonResult, DiffStats } from '../types';
+import { matchesCategory } from '../utils/categories';
+import CategorySelect from '../components/CategorySelect';
 
 interface CellData {
   simResult: SimulationResult | null;
@@ -44,11 +46,9 @@ interface DetailInfo {
   cell: CellData;
 }
 
-const CATEGORIES = ['전체', 'Basic Verification', 'Separate Effect Test', 'Integral Effect Test', 'Multi-dimensional', 'Other'];
-
 export default function DashboardPage() {
   const queryClient = useQueryClient();
-  const [filterCategory, setFilterCategory] = useState('전체');
+  const [filterCategory, setFilterCategory] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'pass' | 'fail' | 'no_result'>('all');
   const [detail, setDetail] = useState<DetailInfo | null>(null);
 
@@ -102,7 +102,7 @@ export default function DashboardPage() {
 
   // Filter input files
   const filteredFiles = inputFiles.filter(f => {
-    if (filterCategory !== '전체' && f.category !== filterCategory) return false;
+    if (filterCategory && !matchesCategory(f.category, filterCategory)) return false;
     if (filterStatus !== 'all') {
       // Check if any cell for this file matches the status filter
       const hasMatch = displayVersions.some(v => {
@@ -200,18 +200,14 @@ export default function DashboardPage() {
 
       {/* Filters */}
       <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' }}>
-        <TextField
-          select
-          size="small"
-          label="카테고리"
+        <CategorySelect
           value={filterCategory}
-          onChange={e => setFilterCategory(e.target.value)}
-          sx={{ minWidth: 180 }}
-        >
-          {CATEGORIES.map(c => (
-            <MenuItem key={c} value={c}>{c}</MenuItem>
-          ))}
-        </TextField>
+          onChange={setFilterCategory}
+          label="카테고리"
+          size="small"
+          margin="none"
+          emptyLabel="전체"
+        />
         <TextField
           select
           size="small"

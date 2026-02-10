@@ -14,7 +14,6 @@ import {
   Chip,
   Tooltip,
   Alert,
-  MenuItem,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
@@ -33,14 +32,11 @@ import {
 } from '../services/inputFiles';
 import { useAuth } from '../contexts/AuthContext';
 import type { InputFile } from '../types';
+import CategorySelect from '../components/CategorySelect';
+import { getCategoryLabel, matchesCategory, getCategoryOptions } from '../utils/categories';
 
-const CATEGORIES = [
-  'Basic Verification',
-  'Separate Effect Test',
-  'Integral Effect Test',
-  'Multi-dimensional',
-  'Other',
-];
+// Level 1 & 2 categories for filter chips
+const FILTER_CATEGORIES = getCategoryOptions().filter(c => c.level <= 2);
 
 export default function InputFilesPage() {
   const { role } = useAuth();
@@ -63,7 +59,10 @@ export default function InputFilesPage() {
   const [bulkFiles, setBulkFiles] = useState<File[]>([]);
   const [bulkCategory, setBulkCategory] = useState('');
   const [bulkError, setBulkError] = useState('');
-  const [bulkResult, setBulkResult] = useState<{ succeeded: string[]; failed: { name: string; error: string }[] } | null>(null);
+  const [bulkResult, setBulkResult] = useState<{
+    succeeded: string[];
+    failed: { name: string; error: string }[];
+  } | null>(null);
   const [bulkUploading, setBulkUploading] = useState(false);
 
   const { data: files = [], isLoading } = useQuery({
@@ -157,7 +156,7 @@ export default function InputFilesPage() {
   };
 
   const filtered = filterCategory
-    ? files.filter(f => f.category === filterCategory)
+    ? files.filter(f => matchesCategory(f.category, filterCategory))
     : files;
 
   return (
@@ -196,13 +195,14 @@ export default function InputFilesPage() {
           variant={filterCategory === '' ? 'filled' : 'outlined'}
           color={filterCategory === '' ? 'primary' : 'default'}
         />
-        {CATEGORIES.map(cat => (
+        {FILTER_CATEGORIES.map(cat => (
           <Chip
-            key={cat}
-            label={cat}
-            onClick={() => setFilterCategory(cat)}
-            variant={filterCategory === cat ? 'filled' : 'outlined'}
-            color={filterCategory === cat ? 'primary' : 'default'}
+            key={cat.id}
+            label={cat.label}
+            onClick={() => setFilterCategory(cat.id)}
+            variant={filterCategory === cat.id ? 'filled' : 'outlined'}
+            color={filterCategory === cat.id ? 'primary' : 'default'}
+            size={cat.level === 1 ? 'medium' : 'small'}
           />
         ))}
       </Box>
@@ -216,7 +216,7 @@ export default function InputFilesPage() {
             gap: 1,
             '& .row': {
               display: 'grid',
-              gridTemplateColumns: '2fr 1fr 3fr auto',
+              gridTemplateColumns: '2fr 2fr 3fr auto',
               alignItems: 'center',
               p: 1.5,
               borderRadius: 1,
@@ -226,10 +226,18 @@ export default function InputFilesPage() {
         >
           {/* Header */}
           <Box className="row" sx={{ bgcolor: 'grey.100', fontWeight: 'bold' }}>
-            <Typography variant="subtitle2" fontWeight="bold">파일명</Typography>
-            <Typography variant="subtitle2" fontWeight="bold">카테고리</Typography>
-            <Typography variant="subtitle2" fontWeight="bold">설명</Typography>
-            <Typography variant="subtitle2" fontWeight="bold">작업</Typography>
+            <Typography variant="subtitle2" fontWeight="bold">
+              파일명
+            </Typography>
+            <Typography variant="subtitle2" fontWeight="bold">
+              카테고리
+            </Typography>
+            <Typography variant="subtitle2" fontWeight="bold">
+              설명
+            </Typography>
+            <Typography variant="subtitle2" fontWeight="bold">
+              작업
+            </Typography>
           </Box>
 
           {filtered.map(file => (
@@ -244,8 +252,8 @@ export default function InputFilesPage() {
                   </Tooltip>
                 )}
               </Box>
-              <Typography variant="body2" color="text.secondary">
-                {file.category ?? '-'}
+              <Typography variant="body2" color="text.secondary" noWrap>
+                {file.category ? getCategoryLabel(file.category) : '-'}
               </Typography>
               <Typography variant="body2" color="text.secondary" noWrap>
                 {file.description ?? '-'}
@@ -270,7 +278,11 @@ export default function InputFilesPage() {
                       </IconButton>
                     </Tooltip>
                     <Tooltip title="삭제">
-                      <IconButton size="small" color="error" onClick={() => setDeleteTarget(file)}>
+                      <IconButton
+                        size="small"
+                        color="error"
+                        onClick={() => setDeleteTarget(file)}
+                      >
                         <DeleteIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
@@ -305,21 +317,10 @@ export default function InputFilesPage() {
             margin="normal"
             required
           />
-          <TextField
-            fullWidth
-            select
-            label="카테고리"
+          <CategorySelect
             value={formCategory}
-            onChange={e => setFormCategory(e.target.value)}
-            margin="normal"
-          >
-            <MenuItem value="">미분류</MenuItem>
-            {CATEGORIES.map(cat => (
-              <MenuItem key={cat} value={cat}>
-                {cat}
-              </MenuItem>
-            ))}
-          </TextField>
+            onChange={setFormCategory}
+          />
           <TextField
             fullWidth
             label="설명"
@@ -331,7 +332,10 @@ export default function InputFilesPage() {
           />
           <FormControlLabel
             control={
-              <Checkbox checked={formInternal} onChange={e => setFormInternal(e.target.checked)} />
+              <Checkbox
+                checked={formInternal}
+                onChange={e => setFormInternal(e.target.checked)}
+              />
             }
             label="원자력연구원 내부 전용 (파일 업로드 불가)"
           />
@@ -370,7 +374,8 @@ export default function InputFilesPage() {
         <DialogTitle>입력 파일 삭제</DialogTitle>
         <DialogContent>
           <Typography>
-            "{deleteTarget?.name}" 파일을 삭제하시겠습니까? 관련된 시뮬레이션 결과도 함께 삭제됩니다.
+            "{deleteTarget?.name}" 파일을 삭제하시겠습니까? 관련된 시뮬레이션 결과도 함께
+            삭제됩니다.
           </Typography>
         </DialogContent>
         <DialogActions>
@@ -411,7 +416,9 @@ export default function InputFilesPage() {
                   {bulkResult.failed.length}개 파일 실패:
                   <ul style={{ margin: '8px 0 0', paddingLeft: 20 }}>
                     {bulkResult.failed.map((f, i) => (
-                      <li key={i}>{f.name}: {f.error}</li>
+                      <li key={i}>
+                        {f.name}: {f.error}
+                      </li>
                     ))}
                   </ul>
                 </Alert>
@@ -419,21 +426,11 @@ export default function InputFilesPage() {
             </Box>
           ) : (
             <>
-              <TextField
-                fullWidth
-                select
-                label="카테고리 (전체 적용)"
+              <CategorySelect
                 value={bulkCategory}
-                onChange={e => setBulkCategory(e.target.value)}
-                margin="normal"
-              >
-                <MenuItem value="">미분류</MenuItem>
-                {CATEGORIES.map(cat => (
-                  <MenuItem key={cat} value={cat}>
-                    {cat}
-                  </MenuItem>
-                ))}
-              </TextField>
+                onChange={setBulkCategory}
+                label="카테고리 (전체 적용)"
+              />
 
               <Box sx={{ mt: 2, mb: 1 }}>
                 <Button variant="outlined" component="label" startIcon={<UploadFileIcon />}>
