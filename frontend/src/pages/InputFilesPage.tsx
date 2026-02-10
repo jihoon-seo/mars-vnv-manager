@@ -17,6 +17,7 @@ import {
   MenuItem,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import DownloadIcon from '@mui/icons-material/Download';
@@ -28,6 +29,7 @@ import {
   updateInputFile,
   deleteInputFile,
   getInputFileDownloadUrl,
+  bulkCreateInputFiles,
 } from '../services/inputFiles';
 import { useAuth } from '../contexts/AuthContext';
 import type { InputFile } from '../types';
@@ -44,17 +46,25 @@ export default function InputFilesPage() {
   const { role } = useAuth();
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<InputFile | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<InputFile | null>(null);
   const [filterCategory, setFilterCategory] = useState('');
 
-  // Form state
+  // Single form state
   const [formName, setFormName] = useState('');
   const [formDesc, setFormDesc] = useState('');
   const [formCategory, setFormCategory] = useState('');
   const [formInternal, setFormInternal] = useState(false);
   const [formFile, setFormFile] = useState<File | null>(null);
   const [formError, setFormError] = useState('');
+
+  // Bulk upload state
+  const [bulkFiles, setBulkFiles] = useState<File[]>([]);
+  const [bulkCategory, setBulkCategory] = useState('');
+  const [bulkError, setBulkError] = useState('');
+  const [bulkResult, setBulkResult] = useState<{ succeeded: string[]; failed: { name: string; error: string }[] } | null>(null);
+  const [bulkUploading, setBulkUploading] = useState(false);
 
   const { data: files = [], isLoading } = useQuery({
     queryKey: ['input-files'],
@@ -157,9 +167,24 @@ export default function InputFilesPage() {
           입력 파일 관리
         </Typography>
         {role === 'admin' && (
-          <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
-            입력 파일 추가
-          </Button>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
+              입력 파일 추가
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={<UploadFileIcon />}
+              onClick={() => {
+                setBulkFiles([]);
+                setBulkCategory('');
+                setBulkError('');
+                setBulkResult(null);
+                setBulkDialogOpen(true);
+              }}
+            >
+              일괄 업로드
+            </Button>
+          </Box>
         )}
       </Box>
 
@@ -358,6 +383,134 @@ export default function InputFilesPage() {
           >
             삭제
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Bulk Upload Dialog */}
+      <Dialog
+        open={bulkDialogOpen}
+        onClose={() => !bulkUploading && setBulkDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>입력 파일 일괄 업로드</DialogTitle>
+        <DialogContent>
+          {bulkError && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {bulkError}
+            </Alert>
+          )}
+
+          {bulkResult ? (
+            <Box>
+              <Alert severity="success" sx={{ mb: 2 }}>
+                {bulkResult.succeeded.length}개 파일 업로드 성공
+              </Alert>
+              {bulkResult.failed.length > 0 && (
+                <Alert severity="warning" sx={{ mb: 2 }}>
+                  {bulkResult.failed.length}개 파일 실패:
+                  <ul style={{ margin: '8px 0 0', paddingLeft: 20 }}>
+                    {bulkResult.failed.map((f, i) => (
+                      <li key={i}>{f.name}: {f.error}</li>
+                    ))}
+                  </ul>
+                </Alert>
+              )}
+            </Box>
+          ) : (
+            <>
+              <TextField
+                fullWidth
+                select
+                label="카테고리 (전체 적용)"
+                value={bulkCategory}
+                onChange={e => setBulkCategory(e.target.value)}
+                margin="normal"
+              >
+                <MenuItem value="">미분류</MenuItem>
+                {CATEGORIES.map(cat => (
+                  <MenuItem key={cat} value={cat}>
+                    {cat}
+                  </MenuItem>
+                ))}
+              </TextField>
+
+              <Box sx={{ mt: 2, mb: 1 }}>
+                <Button variant="outlined" component="label" startIcon={<UploadFileIcon />}>
+                  파일 선택 (다중 선택 가능)
+                  <input
+                    type="file"
+                    hidden
+                    multiple
+                    onChange={e => {
+                      const selected = Array.from(e.target.files ?? []);
+                      setBulkFiles(selected);
+                    }}
+                  />
+                </Button>
+              </Box>
+
+              {bulkFiles.length > 0 && (
+                <Box sx={{ mt: 1, maxHeight: 200, overflow: 'auto' }}>
+                  <Typography variant="body2" fontWeight="bold" sx={{ mb: 0.5 }}>
+                    선택된 파일: {bulkFiles.length}개
+                  </Typography>
+                  {bulkFiles.map((f, i) => (
+                    <Typography key={i} variant="body2" color="text.secondary">
+                      {f.name} ({(f.size / 1024).toFixed(1)} KB)
+                    </Typography>
+                  ))}
+                </Box>
+              )}
+
+              {bulkUploading && (
+                <Alert severity="info" sx={{ mt: 2 }}>
+                  업로드 중... ({bulkFiles.length}개 파일 처리 중)
+                </Alert>
+              )}
+            </>
+          )}
+        </DialogContent>
+        <DialogActions>
+          {bulkResult ? (
+            <Button
+              variant="contained"
+              onClick={() => {
+                setBulkDialogOpen(false);
+                setBulkResult(null);
+              }}
+            >
+              닫기
+            </Button>
+          ) : (
+            <>
+              <Button onClick={() => setBulkDialogOpen(false)} disabled={bulkUploading}>
+                취소
+              </Button>
+              <Button
+                variant="contained"
+                disabled={bulkFiles.length === 0 || bulkUploading}
+                onClick={async () => {
+                  setBulkUploading(true);
+                  setBulkError('');
+                  try {
+                    const result = await bulkCreateInputFiles(
+                      bulkFiles,
+                      bulkCategory || null
+                    );
+                    setBulkResult(result);
+                    queryClient.invalidateQueries({ queryKey: ['input-files'] });
+                  } catch (err) {
+                    setBulkError((err as Error).message);
+                  } finally {
+                    setBulkUploading(false);
+                  }
+                }}
+              >
+                {bulkUploading ? '업로드 중...' : `${bulkFiles.length}개 파일 업로드`}
+              </Button>
+            </>
+          )}
         </DialogActions>
       </Dialog>
     </Box>

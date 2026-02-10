@@ -71,6 +71,39 @@ export async function deleteInputFile(id: string) {
   if (error) throw error;
 }
 
+export async function bulkCreateInputFiles(
+  files: File[],
+  category: string | null
+): Promise<{ succeeded: string[]; failed: { name: string; error: string }[] }> {
+  const succeeded: string[] = [];
+  const failed: { name: string; error: string }[] = [];
+
+  for (const file of files) {
+    try {
+      const storagePath = `${Date.now()}_${file.name}`;
+      const { error: uploadError } = await supabase.storage
+        .from('input-files')
+        .upload(storagePath, file);
+      if (uploadError) throw uploadError;
+
+      const { error: dbError } = await supabase.from('input_files').insert({
+        name: file.name,
+        description: null,
+        category,
+        file_path: storagePath,
+        is_internal_only: false,
+      });
+      if (dbError) throw dbError;
+
+      succeeded.push(file.name);
+    } catch (err) {
+      failed.push({ name: file.name, error: (err as Error).message });
+    }
+  }
+
+  return { succeeded, failed };
+}
+
 export function getInputFileDownloadUrl(filePath: string) {
   const { data } = supabase.storage.from('input-files').getPublicUrl(filePath);
   return data.publicUrl;

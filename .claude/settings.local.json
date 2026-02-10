@@ -5,7 +5,9 @@
       "Bash(npm install)",
       "Bash(npm install:*)",
       "Bash(npx tsc:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(gh repo view:*)",
+      "WebFetch(domain:github.com)"
     ]
   }
 }
