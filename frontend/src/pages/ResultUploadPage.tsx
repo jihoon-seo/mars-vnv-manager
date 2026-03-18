@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import {
   Box,
   Button,
@@ -30,6 +30,7 @@ export default function ResultUploadPage() {
   const [selectedInputFile, setSelectedInputFile] = useState('');
   const [selectedVersion, setSelectedVersion] = useState('');
   const [file, setFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
 
@@ -83,6 +84,7 @@ export default function ResultUploadPage() {
       setSuccess('결과 파일이 업로드되었습니다.');
       setError('');
       setFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     },
     onError: (err: Error) => {
       setError(err.message);
@@ -149,6 +151,7 @@ export default function ResultUploadPage() {
             <input
               type="file"
               hidden
+              ref={fileInputRef}
               onChange={e => setFile(e.target.files?.[0] ?? null)}
             />
           </Button>

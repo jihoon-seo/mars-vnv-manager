@@ -67,15 +67,19 @@ CREATE TABLE global_settings (
 -- =============================================================
 -- Row Level Security (RLS)
 -- =============================================================
+-- 현재 개발 중이므로 RLS를 비활성화한 상태입니다.
+-- 프로덕션 배포 전에 아래 DISABLE → ENABLE로 변경하세요.
+-- =============================================================
 
-ALTER TABLE user_roles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE input_files ENABLE ROW LEVEL SECURITY;
-ALTER TABLE mars_versions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE simulation_results ENABLE ROW LEVEL SECURITY;
-ALTER TABLE comparison_results ENABLE ROW LEVEL SECURITY;
-ALTER TABLE global_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_roles DISABLE ROW LEVEL SECURITY;
+ALTER TABLE input_files DISABLE ROW LEVEL SECURITY;
+ALTER TABLE mars_versions DISABLE ROW LEVEL SECURITY;
+ALTER TABLE simulation_results DISABLE ROW LEVEL SECURITY;
+ALTER TABLE comparison_results DISABLE ROW LEVEL SECURITY;
+ALTER TABLE global_settings DISABLE ROW LEVEL SECURITY;
 
 -- Helper function: check if current user is admin
+-- SECURITY DEFINER로 RLS를 우회하여 user_roles 조회 (무한 재귀 방지)
 CREATE OR REPLACE FUNCTION is_admin()
 RETURNS BOOLEAN AS $$
   SELECT EXISTS (
@@ -84,19 +88,32 @@ RETURNS BOOLEAN AS $$
   );
 $$ LANGUAGE sql SECURITY DEFINER;
 
+-- =============================================================
+-- RLS 정책 (RLS를 ENABLE로 변경하면 적용됨)
+-- 권한 구조:
+--   User:  SELECT + INSERT
+--   Admin: SELECT + INSERT + UPDATE + DELETE
+-- =============================================================
+
 -- ---- user_roles ----
 CREATE POLICY "user_roles_select" ON user_roles
   FOR SELECT USING (auth.role() = 'authenticated');
 
-CREATE POLICY "user_roles_admin" ON user_roles
-  FOR ALL USING (is_admin());
+CREATE POLICY "user_roles_insert" ON user_roles
+  FOR INSERT WITH CHECK (is_admin());
+
+CREATE POLICY "user_roles_update" ON user_roles
+  FOR UPDATE USING (is_admin());
+
+CREATE POLICY "user_roles_delete" ON user_roles
+  FOR DELETE USING (is_admin());
 
 -- ---- input_files ----
 CREATE POLICY "input_files_select" ON input_files
   FOR SELECT USING (auth.role() = 'authenticated');
 
 CREATE POLICY "input_files_insert" ON input_files
-  FOR INSERT WITH CHECK (is_admin());
+  FOR INSERT WITH CHECK (auth.role() = 'authenticated');
 
 CREATE POLICY "input_files_update" ON input_files
   FOR UPDATE USING (is_admin());
@@ -109,7 +126,7 @@ CREATE POLICY "mars_versions_select" ON mars_versions
   FOR SELECT USING (auth.role() = 'authenticated');
 
 CREATE POLICY "mars_versions_insert" ON mars_versions
-  FOR INSERT WITH CHECK (is_admin());
+  FOR INSERT WITH CHECK (auth.role() = 'authenticated');
 
 CREATE POLICY "mars_versions_update" ON mars_versions
   FOR UPDATE USING (is_admin());
@@ -147,8 +164,63 @@ CREATE POLICY "comparison_results_delete" ON comparison_results
 CREATE POLICY "global_settings_select" ON global_settings
   FOR SELECT USING (auth.role() = 'authenticated');
 
-CREATE POLICY "global_settings_admin" ON global_settings
-  FOR ALL USING (is_admin());
+CREATE POLICY "global_settings_update" ON global_settings
+  FOR UPDATE USING (is_admin());
+
+CREATE POLICY "global_settings_insert" ON global_settings
+  FOR INSERT WITH CHECK (is_admin());
+
+CREATE POLICY "global_settings_delete" ON global_settings
+  FOR DELETE USING (is_admin());
+
+-- =============================================================
+-- Storage 정책 (storage.objects)
+-- =============================================================
+-- 사전 조건: Supabase 대시보드 > Storage에서
+-- 'input-files'와 'plotfl-results' bucket을 생성해야 합니다.
+-- =============================================================
+
+-- ---- input-files bucket ----
+CREATE POLICY "auth_users_upload" ON storage.objects
+  FOR INSERT WITH CHECK (
+    bucket_id = 'input-files' AND auth.role() = 'authenticated'
+  );
+
+CREATE POLICY "auth_users_select" ON storage.objects
+  FOR SELECT USING (
+    bucket_id = 'input-files' AND auth.role() = 'authenticated'
+  );
+
+CREATE POLICY "auth_users_update" ON storage.objects
+  FOR UPDATE USING (
+    bucket_id = 'input-files' AND auth.role() = 'authenticated'
+  );
+
+CREATE POLICY "auth_users_delete" ON storage.objects
+  FOR DELETE USING (
+    bucket_id = 'input-files' AND auth.role() = 'authenticated'
+  );
+
+-- ---- plotfl-results bucket ----
+CREATE POLICY "auth_users_upload_plotfl" ON storage.objects
+  FOR INSERT WITH CHECK (
+    bucket_id = 'plotfl-results' AND auth.role() = 'authenticated'
+  );
+
+CREATE POLICY "auth_users_select_plotfl" ON storage.objects
+  FOR SELECT USING (
+    bucket_id = 'plotfl-results' AND auth.role() = 'authenticated'
+  );
+
+CREATE POLICY "auth_users_update_plotfl" ON storage.objects
+  FOR UPDATE USING (
+    bucket_id = 'plotfl-results' AND auth.role() = 'authenticated'
+  );
+
+CREATE POLICY "auth_users_delete_plotfl" ON storage.objects
+  FOR DELETE USING (
+    bucket_id = 'plotfl-results' AND auth.role() = 'authenticated'
+  );
 
 -- =============================================================
 -- 초기 데이터: 기본 비교 설정
@@ -160,12 +232,18 @@ VALUES ('comparison_settings', '{"tolerance_type": "absolute", "tolerance_value"
 -- 자동으로 새 가입자에게 'user' 역할 부여하는 트리거
 -- =============================================================
 CREATE OR REPLACE FUNCTION handle_new_user()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+SET search_path = public
+AS $$
 BEGIN
-  INSERT INTO user_roles (user_id, role) VALUES (NEW.id, 'user');
+  INSERT INTO public.user_roles (user_id, role) VALUES (NEW.id, 'user');
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 트리거 함수 실행 권한 부여
+GRANT USAGE ON SCHEMA public TO supabase_auth_admin;
+GRANT INSERT ON public.user_roles TO supabase_auth_admin;
 
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users

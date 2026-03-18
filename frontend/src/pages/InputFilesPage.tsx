@@ -263,8 +263,10 @@ export default function InputFilesPage() {
                   <Tooltip title="다운로드">
                     <IconButton
                       size="small"
-                      href={getInputFileDownloadUrl(file.file_path)}
-                      target="_blank"
+                      onClick={async () => {
+                        const url = await getInputFileDownloadUrl(file.file_path!);
+                        window.open(url, '_blank');
+                      }}
                     >
                       <DownloadIcon fontSize="small" />
                     </IconButton>

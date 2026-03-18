@@ -9,7 +9,10 @@
       "Bash(gh repo view:*)",
       "WebFetch(domain:github.com)",
       "Bash(where:*)",
-      "Bash(pdftotext:*)"
+      "Bash(pdftotext:*)",
+      "Bash(powershell.exe:*)",
+      "Bash(claude mcp add:*)",
+      "Bash(curl.exe:*)"
     ]
   }
 }

@@ -104,7 +104,10 @@ export async function bulkCreateInputFiles(
   return { succeeded, failed };
 }
 
-export function getInputFileDownloadUrl(filePath: string) {
-  const { data } = supabase.storage.from('input-files').getPublicUrl(filePath);
-  return data.publicUrl;
+export async function getInputFileDownloadUrl(filePath: string) {
+  const { data, error } = await supabase.storage
+    .from('input-files')
+    .createSignedUrl(filePath, 60); // 60초 유효
+  if (error) throw error;
+  return data.signedUrl;
 }
