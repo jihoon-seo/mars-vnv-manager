@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run dev:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm run lint:*)",
+      "Bash(npm run preview:*)",
+      "Bash(npm install:*)",
+      "Bash(npx tsc:*)",
+      "Bash(curl.exe:*)",
+      "Bash(ls:*)",
+      "WebFetch(domain:rhelttcvnwuikieukxgo.supabase.co)"
+    ]
+  }
+}
